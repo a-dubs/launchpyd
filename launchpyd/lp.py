@@ -177,9 +177,9 @@ def parse_jira_tickets_from_mp(mp: MergeProposalType, jira_prefixes: list[str]) 
             if text is None:
                 continue
             for prefix in jira_prefixes:
-                matches = re.findall(rf"({prefix}-\d+)", text)
+                matches = re.findall(rf"({prefix.upper()}-\d+)", text.upper())
                 if len(matches) > 0:
-                    results += matches
+                    results += [m.upper() for m in matches]
         return results
 
     jira_tickets = find_jira_ticket_mentions([mp.description, mp.commit_message, mp.source_branch])
@@ -194,7 +194,6 @@ def convert_mp_dict_to_type(mp_dict: dict) -> MergeProposalType:
         url=mp_dict["web_link"],
         review_state=mp_dict["queue_status"],
         diffs=[],
-        reviewers=[],
         description=mp_dict["description"],
         commit_message=mp_dict["commit_message"],
         ci_cd_status=get_mp_ci_cd_state(mp_url=mp_dict["web_link"]),

@@ -64,7 +64,6 @@ class MergeProposalType:
     target_owner: str
     review_state: str
     diffs: List[DiffType] = dataclasses.field(default_factory=list)
-    reviewers: Optional[List[str]] = dataclasses.field(default_factory=list)
     description: Optional[str] = None
     commit_message: Optional[str] = None
     ci_cd_status: Literal["PASSING", "FAILING", "UNKNOWN"] = "UNKNOWN"
