@@ -1,10 +1,10 @@
 import dataclasses
 import json
-from typing import List, Optional, Type, TypeVar, Literal
 from datetime import datetime
+from typing import List, Literal, Optional, Type, TypeVar
 
 # Define a type variable for our dataclasses
-T = TypeVar('T')
+T = TypeVar("T")
 
 # Define the dataclasses as before
 @dataclasses.dataclass
@@ -14,11 +14,13 @@ class InlineCommentMessageType:
     message: str
     date: datetime
 
+
 @dataclasses.dataclass
 class InlineCommentType:
     file: str
     line_no: int
     messages: List[InlineCommentMessageType]
+
 
 @dataclasses.dataclass
 class MergeProposalCommentType:
@@ -29,11 +31,13 @@ class MergeProposalCommentType:
     date_created: str
     date_last_edited: Optional[str] = None
 
+
 @dataclasses.dataclass
 class DiffStatType:
     file: str
     additions: int
     deletions: int
+
 
 @dataclasses.dataclass
 class DiffType:
@@ -43,12 +47,16 @@ class DiffType:
     inline_comments: List[InlineCommentType] = dataclasses.field(default_factory=list)
     diff_text: Optional[str] = None
 
+
 @dataclasses.dataclass
-class MergeProposalReviewVote():
+class MergeProposalReviewVote:
     reviewer_username: str
     reviewer_display_name: str
-    vote: Optional[Literal["APPROVE", "NEEDS_FIXING", "NEEDS_INFO", "ABSTAIN", "DISAPPROVE", "NEEDS_RESUBMITTING"]] = None
+    vote: Optional[
+        Literal["APPROVE", "NEEDS_FIXING", "NEEDS_INFO", "ABSTAIN", "DISAPPROVE", "NEEDS_RESUBMITTING"]
+    ] = None
     needs_reviewer: bool = False
+
 
 @dataclasses.dataclass
 class MergeProposalType:
@@ -69,22 +77,25 @@ class MergeProposalType:
     ci_cd_status: Literal["PASSING", "FAILING", "UNKNOWN"] = "UNKNOWN"
     jira_tickets: Optional[List[str]] = dataclasses.field(default_factory=list)
     comments: List[MergeProposalCommentType] = dataclasses.field(default_factory=list)
-    review_votes: List[MergeProposalReviewVote] = dataclasses.field(default_factory=list) 
+    review_votes: List[MergeProposalReviewVote] = dataclasses.field(default_factory=list)
 
 
 def from_dict(data_class: Type[T], data: dict) -> T:
     try:
         # Handle special case for datetime field
         if isinstance(data_class, InlineCommentMessageType):
-            data['date'] = datetime.fromisoformat(data['date'])
+            data["date"] = datetime.fromisoformat(data["date"])
         # Recursively convert dictionaries to dataclasses
         fieldtypes = {f.name: f.type for f in dataclasses.fields(data_class)}
-        return data_class(**{
-            f: from_dict(fieldtypes[f], data[f]) if dataclasses.is_dataclass(fieldtypes[f]) else data[f]
-            for f in data
-        })
+        return data_class(
+            **{
+                f: from_dict(fieldtypes[f], data[f]) if dataclasses.is_dataclass(fieldtypes[f]) else data[f]
+                for f in data
+            }
+        )
     except (TypeError, ValueError) as e:
         raise ValueError(f"Error converting dictionary to {data_class}: {e}")
+
 
 def to_dict(instance: dataclasses.dataclass) -> dict:
     if dataclasses.is_dataclass(instance):
@@ -102,14 +113,17 @@ def to_dict(instance: dataclasses.dataclass) -> dict:
         return result
     raise TypeError("to_dict() should be called on dataclass instances")
 
+
 def from_json(data_class: Type[T], json_data: str) -> T:
     try:
         return from_dict(data_class, json.loads(json_data))
     except json.JSONDecodeError as e:
         raise ValueError(f"Error decoding JSON: {e}")
 
+
 def to_json(instance: dataclasses.dataclass) -> str:
     return json.dumps(to_dict(instance), ensure_ascii=False)
+
 
 # # Example usage:
 # # Convert dataclass instance to JSON
