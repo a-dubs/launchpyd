@@ -1,0 +1,57 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.pydevproject
+*.project
+*.settings/
+*.tmproj
+*.esproj
+*.orig
+
+# Test files
+.tox/
+.coverage
+htmlcov/
+
+# Other
+*.DS_Store
+*.env
+*.log
+*.swp
+*.bak
+*.tmp
+*.pid
+*.out
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.pyc
+*.pyo
+*.egg-info]
+.venv
+
+# Sensitive files
+.env
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# Ignore everything with "_ignore" in the name
+*_ignore*
