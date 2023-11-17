@@ -71,7 +71,13 @@ def get_mps_from_lp_project(project_name: str):
 
 # CACHE = {"lp_mp_objs": {}}
 
+# 'web_link': 'https://code.launchpad.net/~virtustom/cloudware/+git/cpc_jenkins/+merge/455274'
+# 'self_link': 'https://api.launchpad.net/devel/~virtustom/cloudware/+git/cpc_jenkins/+merge/455274', 
+def convert_web_link_to_api_link(web_link):
+    return web_link.replace("code.launchpad.net", "api.launchpad.net/devel")
+
 def get_lp_mp_obj_from_url(url):
+    return LP.load(convert_web_link_to_api_link(url))
     project_name = parse_project_name_from_url(url)
     mps = get_mps_from_lp_project(project_name)
     for mp in mps:
