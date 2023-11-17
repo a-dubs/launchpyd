@@ -76,3 +76,18 @@ def match_diff_comments_with_file(comments, diff_txt):
         new_comment["line_no"] = relative_line
         new_comments.append(new_comment)
     return new_comments
+
+def construct_git_ssh_url(git_repository_link):
+    """
+    Construct a git ssh url from a git repository link.
+    """
+    # make sure the url is in the format "https://api.launchpad.net/devel/~virtustom/cloudware/+git/cpc_jenkins"
+    # use regex
+    import re
+    prefix = "https://api.launchpad.net/devel/"
+    if not git_repository_link.startswith(prefix):
+        raise ValueError(f"git_repository_link should start with {prefix}")
+    new_prefix = "git+ssh://git.launchpad.net/"
+    new_git_repository_link = git_repository_link.replace(prefix, new_prefix)
+    return new_git_repository_link
+

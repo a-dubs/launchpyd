@@ -42,10 +42,14 @@ class DiffStatType:
 @dataclasses.dataclass
 class DiffType:
     id: str
+    title: str
     self_link: str
+    source_revision_id: str
+    target_revision_id: str
     diff_stats: List[DiffStatType] = dataclasses.field(default_factory=list)
     inline_comments: List[InlineCommentType] = dataclasses.field(default_factory=list)
     diff_text: Optional[str] = None
+    original_file_contents: Optional[dict[str, str]] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass
