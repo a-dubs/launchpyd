@@ -366,7 +366,6 @@ def get_file_contents_from_git_url_and_hash(target_git_url: str, target_branch:s
         else:
             with open(full_path, "r") as f:
                 file_contents[file_path] = f.read()
-    breakpoint()
     return file_contents
 
 
