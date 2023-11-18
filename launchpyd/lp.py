@@ -336,20 +336,20 @@ def get_file_contents_from_git_url_and_hash(target_git_url: str, target_branch:s
         result = subprocess.run(f"git -C {temp_dir} remote -v", check=True, capture_output=True, shell=True, text=True)
         print(result.stdout)
         # if it is, then just pull the latest changes
-        if target_git_url in result.stdout:
-            checkout_cmd = f"git -C {temp_dir} checkout {target_branch}"
-            subprocess.run(checkout_cmd.split(), check=True, shell=True)
-            refresh_cmd = f"git -C {temp_dir} pull origin {target_branch}"
-            subprocess.run(refresh_cmd.split(), check=True, shell=True)
-        # if not, then delete the directory and clone the repo
-        else:
-            shutil.rmtree(temp_dir)
-            # shutil.rmtree(temp_dir)
-            os.makedirs(temp_dir, exist_ok=True)            
-            # Clone the repository into the temporary directory
-            clone_cmd = f"git clone -b {target_branch} {target_git_url} {temp_dir}"
-            print(clone_cmd)
-            subprocess.run(clone_cmd.split(), check=True)
+        # if target_git_url in result.stdout:
+        #     checkout_cmd = f"git -C {temp_dir} checkout {target_branch}"
+        #     subprocess.run(checkout_cmd.split(), check=True, shell=True)
+        #     refresh_cmd = f"git -C {temp_dir} pull origin {target_branch}"
+        #     subprocess.run(refresh_cmd.split(), check=True, shell=True)
+        # # if not, then delete the directory and clone the repo
+        # else:
+        shutil.rmtree(temp_dir)
+        # shutil.rmtree(temp_dir)
+        os.makedirs(temp_dir, exist_ok=True)            
+        # Clone the repository into the temporary directory
+        clone_cmd = f"git clone -b {target_branch} {target_git_url} {temp_dir}"
+        print(clone_cmd)
+        subprocess.run(clone_cmd.split(), check=True)
 
     # Reset the repository to the specified commit hash
     reset_cmd = f"git -C {temp_dir} reset --hard {target_hash}"
