@@ -1,6 +1,6 @@
 import re
 
-from lp_types import DiffPerFileInfoType
+from launchpyd.lp_types import DiffPerFileInfoType
 
 
 def extract_file_and_line_from_diff(line_number, diff_txt) -> tuple[str, int, str]:
