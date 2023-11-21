@@ -1,5 +1,7 @@
 import re
 
+from lp_types import DiffPerFileInfoType
+
 
 def extract_file_and_line_from_diff(line_number, diff_txt) -> tuple[str, int, str]:
     """
@@ -77,6 +79,7 @@ def match_diff_comments_with_file(comments, diff_txt):
         new_comments.append(new_comment)
     return new_comments
 
+
 def construct_git_ssh_url(git_repository_link):
     """
     Construct a git ssh url from a git repository link.
@@ -84,6 +87,7 @@ def construct_git_ssh_url(git_repository_link):
     # make sure the url is in the format "https://api.launchpad.net/devel/~virtustom/cloudware/+git/cpc_jenkins"
     # use regex
     import re
+
     prefix = "https://api.launchpad.net/devel/"
     if not git_repository_link.startswith(prefix):
         raise ValueError(f"git_repository_link should start with {prefix}")
@@ -91,3 +95,58 @@ def construct_git_ssh_url(git_repository_link):
     new_git_repository_link = git_repository_link.replace(prefix, new_prefix)
     return new_git_repository_link
 
+
+def parse_base_diff_per_file_info(diff_text: str) -> list[DiffPerFileInfoType]:
+    # Split the diff into lines
+    lines = diff_text.split("\n")
+
+    # Regular expressions to match different parts of the diff
+    diff_start_regex = re.compile(r"^diff --git a/(.+) b/(.+)$")
+    file_status_regex = re.compile(r"^(new file|deleted file)")
+
+    # Store the parsed data
+    parsed_data = []
+    current_file = {}
+    counting = False
+
+    for line in lines:
+        # Check for start of a new file diff
+        diff_start_match = diff_start_regex.match(line)
+        if diff_start_match:
+            # Save previous file data if exists
+            if current_file:
+                parsed_data.append(DiffPerFileInfoType(**current_file))
+
+            # Reset for new file
+            current_file = {
+                "file": diff_start_match.group(1),
+                "lines_added": 0,
+                "lines_deleted": 0,
+                "status": "modified",  # default status
+            }
+            counting = False
+            continue
+
+        # Check for file status (new, deleted)
+        file_status_match = file_status_regex.match(line)
+        if file_status_match:
+            current_file["status"] = file_status_match.group(1)
+            continue
+
+        # Start counting lines after the file header
+        if line.startswith("+++") or line.startswith("---"):
+            counting = True
+            continue
+
+        # Count added and deleted lines
+        if counting:
+            if line.startswith("+") and not line.startswith("+++"):
+                current_file["lines_added"] += 1
+            elif line.startswith("-") and not line.startswith("---"):
+                current_file["lines_deleted"] += 1
+
+    # Add the last file data if exists
+    if current_file:
+        parsed_data.append(DiffPerFileInfoType(**current_file))
+
+    return parsed_data

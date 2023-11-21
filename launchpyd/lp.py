@@ -1,4 +1,5 @@
 import os
+import pickle
 import re
 import shutil
 import subprocess
@@ -6,6 +7,7 @@ from datetime import datetime
 from pprint import pprint
 
 from launchpadlib.launchpad import Launchpad
+from tqdm import tqdm
 
 from launchpyd.lp_types import *
 from launchpyd.lp_utils import *
@@ -18,7 +20,7 @@ def login():
     print("Logging into Launchpad...")
     launchpad = Launchpad.login_with("py-launchpad", "production", version="devel")
     LP = launchpad
-    print("Logged in as: " + str(LP.me))
+    print("Logged in as: " + str(LP.me.name))
     return launchpad
 
 
@@ -44,18 +46,18 @@ def find_latest_matching_entry(data_list, target_date):
     return None
 
 
-def parse_repo_owner_from_url(url):
-    username = re.findall(r"launchpad.net/.*~([0-9 a-z A-Z _ -]+)/", url)[0]
+def parse_repo_owner_from_url(url) -> str:
+    username = re.findall(r"/.*~([0-9 a-z A-Z _ -]+)/", url)[0]
     return username
 
 
 def parse_project_name_from_url(url):
-    project_name = re.findall(r"launchpad.net/.*~[0-9 a-z A-Z _ -]+/([0-9 a-z A-Z _ -]+)", url)[0]
+    project_name = re.findall(r"/.*~[0-9 a-z A-Z _ -]+/([0-9 a-z A-Z _ -]+)", url)[0]
     return project_name
 
 
 def parse_repo_name_from_url(url):
-    repo_name = re.findall(r"launchpad.net/.*~[0-9 a-z A-Z _ -]+/[0-9 a-z A-Z _ -]+/\+git/([0-9 a-z A-Z _ -]+)", url)[0]
+    repo_name = re.findall(r"/.*~[0-9 a-z A-Z _ -]+/[0-9 a-z A-Z _ -]+/\+git/([0-9 a-z A-Z _ -]+)", url)[0]
     return repo_name
 
 
@@ -69,12 +71,10 @@ def get_mps_from_lp_project(project_name: str):
     mps = proj.getMergeProposals().entries
     return mps
 
-# CACHE = {"lp_mp_objs": {}}
 
-# 'web_link': 'https://code.launchpad.net/~virtustom/cloudware/+git/cpc_jenkins/+merge/455274'
-# 'self_link': 'https://api.launchpad.net/devel/~virtustom/cloudware/+git/cpc_jenkins/+merge/455274', 
 def convert_web_link_to_api_link(web_link):
     return web_link.replace("code.launchpad.net", "api.launchpad.net/devel")
+
 
 def get_lp_mp_obj_from_url(url):
     return LP.load(convert_web_link_to_api_link(url))
@@ -86,17 +86,32 @@ def get_lp_mp_obj_from_url(url):
     return None
 
 
-def get_diff_stats(diff_dict: dict) -> list[DiffStatType]:
-    diff_stat_dict = diff_dict["diffstat"]
-    diff_stats = [
-        DiffStatType(
-            file=file,
-            additions=int(add_del[0]),
-            deletions=int(add_del[1]),
+def get_all_diff_per_file_info(lp_mp_obj, lp_diff_obj, diff_text) -> list[DiffPerFileInfoType]:
+    try:
+        target_revision_id = lp_diff_obj.target_revision_id
+
+        diff_text_splits = {}
+
+        for split in diff_text.split("diff --git")[1:]:
+            split = "diff --git" + split
+            filename_matches = re.findall(r"diff --git a/(.*) b/(.*)", split)[0]
+            diff_text_splits[filename_matches[0]] = split
+
+        original_file_contents = get_file_contents_from_git_url_and_hash(
+            target_git_url=construct_git_ssh_url(lp_mp_obj.target_git_repository_link),
+            target_branch=lp_mp_obj.target_git_path.split("/")[-1],
+            target_hash=lp_diff_obj.target_revision_id,
+            relevant_files=[filepath for filepath in diff_text_splits.keys()],
         )
-        for file, add_del in diff_stat_dict.items()
-    ]
-    return diff_stats
+
+        per_file_info_list = parse_base_diff_per_file_info(diff_text=diff_text)
+        for file_info in per_file_info_list:
+            file_info.original_file_contents = original_file_contents[file_info.file]
+            file_info.diff_text_snippet = diff_text_splits[file_info.file]
+
+        return per_file_info_list
+    except Exception as e:
+        raise e
 
 
 def convert_inline_comments_dict_to_type(inline_comment: dict):
@@ -149,33 +164,32 @@ def get_diff_inline_comments_and_text_for_mp_and_diff(mp_obj, diff_obj):
     return inline_comments, diff_txt
 
 
-def get_diffs_from_mp(lp_mp_obj=None, web_link:str=None) -> list[DiffType]:
+def get_diffs_from_mp(num_diffs_to_fetch: int, lp_mp_obj=None, web_link: str = None) -> list[DiffType]:
     if lp_mp_obj is None:
         lp_mp_obj = get_lp_mp_obj_from_url(web_link)
     diffs: list[DiffType] = []
-    for diff in lp_mp_obj.preview_diffs.entries:
+    lp_diffs = [entry for entry in lp_mp_obj.preview_diffs.entries]
+    lp_diffs.reverse()  # reverse the list so that the most recent diff is first
+    for diff in lp_diffs:
+        if num_diffs_to_fetch == 0:
+            break
         diff_obj = LP.load(diff["self_link"])
         inline_comments_dicts, diff_text = get_diff_inline_comments_and_text_for_mp_and_diff(lp_mp_obj, diff_obj)
-        diff_stats = get_diff_stats(diff)
-        pprint(diff)
+        diff_per_file_info = get_all_diff_per_file_info(lp_mp_obj, diff_obj, diff_text)
         diffs.append(
             DiffType(
-                diff_stats=diff_stats,
                 inline_comments=[convert_inline_comments_dict_to_type(d) for d in inline_comments_dicts],
                 id=diff["id"],
                 self_link=diff["self_link"],
                 diff_text=diff_text,
                 title=diff["title"],
+                date_created=diff["date_created"],
                 source_revision_id=diff["source_revision_id"],
                 target_revision_id=diff["target_revision_id"],
-                original_file_contents=get_file_contents_from_git_url_and_hash(
-                    target_git_url=construct_git_ssh_url(lp_mp_obj.target_git_repository_link),
-                    target_branch=lp_mp_obj.target_git_path.split("/")[-1],
-                    target_hash=diff["target_revision_id"],
-                    relevant_files=[d.file for d in diff_stats],
-                ),
+                diff_per_file_info=diff_per_file_info,
             )
         )
+        num_diffs_to_fetch -= 1
     return diffs
 
 
@@ -213,7 +227,16 @@ def parse_jira_tickets_from_mp(mp: MergeProposalType, jira_prefixes: list[str]) 
     jira_tickets = find_jira_ticket_mentions([mp.description, mp.commit_message, mp.source_branch])
     return jira_tickets
 
-def make_lpy_mp(web_link:str=None, lp_mp_obj = None, lp_mp_dict: dict = None, fetch_diffs=False) -> MergeProposalType:
+
+def get_lpyd_mp(
+    web_link: str = None,
+    lp_mp_obj=None,
+    lp_mp_dict: dict = None,
+    num_diffs_to_fetch=0,
+) -> MergeProposalType:
+    """
+    Returns a MergeProposalType object
+    """
     if lp_mp_obj is None:
         if not web_link:
             if not lp_mp_dict:
@@ -221,7 +244,7 @@ def make_lpy_mp(web_link:str=None, lp_mp_obj = None, lp_mp_dict: dict = None, fe
             web_link = lp_mp_dict["web_link"]
         lp_mp_obj = get_lp_mp_obj_from_url(web_link)
     source_and_target_info = parse_source_and_target_info(lp_mp_obj)
-    lpy_mp = MergeProposalType(
+    lpyd_mp = MergeProposalType(
         id=lp_mp_obj.web_link.split("/")[-1],
         self_link=lp_mp_obj.self_link,
         repo_name=parse_repo_name_from_url(lp_mp_obj.web_link),
@@ -231,38 +254,41 @@ def make_lpy_mp(web_link:str=None, lp_mp_obj = None, lp_mp_dict: dict = None, fe
         description=lp_mp_obj.description,
         commit_message=lp_mp_obj.commit_message,
         ci_cd_status=get_mp_ci_cd_state(mp_url=lp_mp_obj.web_link),
-        jira_tickets=[],
         comments=get_mp_comments(mp_url=lp_mp_obj.web_link),
         review_votes=get_review_votes(mp_url=lp_mp_obj.web_link),
         **source_and_target_info,
     )
-    if fetch_diffs:
-        lpy_mp.diffs = get_diffs_from_mp(lp_mp_obj=lp_mp_obj)
-    return lpy_mp
-
-def convert_mps(mps: list[dict], fetch_diffs: bool) -> list[MergeProposalType]:
-    lpy_mps = []
-    for mp in mps:
-        make_lpy_mp(mp, fetch_diffs=fetch_diffs)
-    return lpy_mps
+    if num_diffs_to_fetch != 0:
+        lpyd_mp.diffs = get_diffs_from_mp(lp_mp_obj=lp_mp_obj, num_diffs_to_fetch=num_diffs_to_fetch)
+    return lpyd_mp
 
 
-def get_all_mps_from_user(username: str = None, fetch_diffs: bool = False):
+def convert_lp_mps_to_lpyd_mps(mps: list[dict], **kwargs) -> list[MergeProposalType]:
+    lpyd_mps = []
+    for mp in tqdm(mps):
+        lpyd_mps.append(get_lpyd_mp(lp_mp_dict=mp, **kwargs))
+    return lpyd_mps
+
+
+def get_all_mps_from_user(username: str = None, **kwargs):
     if username is None:
         user = LP.me
     else:
         user = LP.people[username]
     mps = user.getMergeProposals().entries
-    return convert_mps(mps, fetch_diffs=fetch_diffs)
+    return convert_lp_mps_to_lpyd_mps(mps, **kwargs)
 
 
-def get_all_mps_from_project(project_name: str, fetch_diffs: bool = False):
+def get_all_mps_from_project(project_name: str, **kwargs):
     proj = get_project(project_name)
     mps = proj.getMergeProposals().entries
-    return convert_mps(mps, fetch_diffs=fetch_diffs)
+    print("Found {} merge proposals".format(len(mps)))
+    return convert_lp_mps_to_lpyd_mps(mps, **kwargs)
 
-def get_lpy_mp_from_url(url, fetch_diffs: bool = False):
-    return make_lpy_mp(web_link=url, fetch_diffs=fetch_diffs)
+
+def get_lpyd_mp_from_url(url, fetch_diffs: bool = False):
+    return get_lpyd_mp(web_link=url, fetch_diffs=fetch_diffs)
+
 
 def get_mp_comments(mp_url: str) -> list[MergeProposalCommentType]:
     mp = get_lp_mp_obj_from_url(mp_url)
@@ -312,49 +338,65 @@ def get_review_votes(mp_url: str, lp_mp_obj=None):
         )
     return reviews
 
-def get_all_repos(project_name:str):
+
+def get_all_repos(project_name: str):
     cw = get_project(project_name)
     pprint([entry["display_name"] for entry in cw.getBranches().entries])
 
 
-# TODO: This does not work.
-def get_file_contents_from_git_url_and_hash(target_git_url: str, target_branch:str, target_hash: str, relevant_files: list[str]) -> dict[str, str]:
+def get_file_contents_from_git_url_and_hash(
+    target_git_url: str, target_branch: str, target_hash: str, relevant_files: list[str]
+) -> dict[str, str]:
     """
     Get the contents of the files in relevant_files from the git repo at git_url at the commit hash
     """
-    print("Getting file contents from '{}' on branch '{}' at commit hash {}".format(target_git_url, target_branch, hash))
-    # check if the target git url at the given branch and commit hash has already been cached in 
+    print(
+        "Getting file contents from '{}' on branch '{}' at commit hash {}".format(
+            target_git_url, target_branch, target_hash
+        )
+    )
+    repo_owner = parse_repo_owner_from_url(target_git_url)
 
     # Create a temporary directory to clone the repository into
-    temp_dir = "temp_git_clone"
-    os.makedirs(temp_dir, exist_ok=True)
-    
-    # delete the temp directory if it already exists
+    temp_dir = os.path.join(os.path.expanduser("~"), ".lpyd", "lp_git_cloning_dir", target_git_url.split("/")[-1])
     if os.path.exists(temp_dir):
-        print("Path already exists")
-        # check that the target git url is the origin remote 
         result = subprocess.run(f"git -C {temp_dir} remote -v", check=True, capture_output=True, shell=True, text=True)
-        print(result.stdout)
-        # if it is, then just pull the latest changes
-        # if target_git_url in result.stdout:
-        #     checkout_cmd = f"git -C {temp_dir} checkout {target_branch}"
-        #     subprocess.run(checkout_cmd.split(), check=True, shell=True)
-        #     refresh_cmd = f"git -C {temp_dir} pull origin {target_branch}"
-        #     subprocess.run(refresh_cmd.split(), check=True, shell=True)
-        # # if not, then delete the directory and clone the repo
-        # else:
+        if target_git_url not in result.stdout:
+            remote_add_cmd = f"git -C {temp_dir} remote add {repo_owner} {target_git_url}"
+            print(remote_add_cmd)
+            subprocess.run(remote_add_cmd.split(), check=True, shell=True)
+
+        # unsure if i need to call "remote update" - the once case I think this might have to happen is if new remote
+        # branches are added to the repo since the last time git clone was called
+        # remote_update_cmd = f"git -C {temp_dir} remote update {repo_owner}"
+        # print(remote_update_cmd)
+        # subprocess.run(remote_update_cmd.split(), check=True)
+        checkout_cmd = f"git -C {temp_dir} checkout {target_branch}"
+        print(checkout_cmd)
+        subprocess.run(checkout_cmd.split(), check=True)
+        # pull_cmd = f"git -C {temp_dir} pull {repo_owner} {target_branch}"
+        # print(pull_cmd)
+        # subprocess.run(pull_cmd.split(), check=True)
+        fetch_cmd = f"git -C {temp_dir} fetch {repo_owner} {target_branch}"
+        print(fetch_cmd)
+        subprocess.run(fetch_cmd.split(), check=True)
+    else:
+        os.makedirs(temp_dir, exist_ok=True)
         shutil.rmtree(temp_dir)
-        # shutil.rmtree(temp_dir)
-        os.makedirs(temp_dir, exist_ok=True)            
+        os.makedirs(temp_dir, exist_ok=True)
         # Clone the repository into the temporary directory
         clone_cmd = f"git clone -b {target_branch} {target_git_url} {temp_dir}"
         print(clone_cmd)
-        subprocess.run(clone_cmd.split(), check=True)
+        subprocess.run(clone_cmd.split(), check=True, stdout=subprocess.DEVNULL)
+        # rename the origin remote to the repo owner
+        remote_rename_cmd = f"git -C {temp_dir} remote rename origin {repo_owner}"
+        print(remote_rename_cmd)
+        subprocess.run(remote_rename_cmd.split(), check=True)
 
     # Reset the repository to the specified commit hash
     reset_cmd = f"git -C {temp_dir} reset --hard {target_hash}"
-    print(reset_cmd)
-    subprocess.run(reset_cmd.split(), check=True)
+    # print(reset_cmd)
+    subprocess.run(reset_cmd.split(), check=True, stdout=subprocess.DEVNULL)
 
     # Read in the contents of the relevant files
     file_contents = {}
@@ -370,5 +412,4 @@ def get_file_contents_from_git_url_and_hash(target_git_url: str, target_branch:s
 
 
 if __name__ == "__main__":
-    login()
     print("No functionality is provided by this module. Please invoke via cli.")
