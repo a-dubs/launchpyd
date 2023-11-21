@@ -286,10 +286,6 @@ def get_all_mps_from_project(project_name: str, **kwargs):
     return convert_lp_mps_to_lpyd_mps(mps, **kwargs)
 
 
-def get_lpyd_mp_from_url(url, fetch_diffs: bool = False):
-    return get_lpyd_mp(web_link=url, fetch_diffs=fetch_diffs)
-
-
 def get_mp_comments(mp_url: str) -> list[MergeProposalCommentType]:
     mp = get_lp_mp_obj_from_url(mp_url)
     results = []
