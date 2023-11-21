@@ -12,7 +12,7 @@ class InlineCommentMessageType:
     author_username: str
     author_display_name: str
     message: str
-    date: datetime
+    date: str
 
 
 @dataclasses.dataclass
@@ -33,17 +33,24 @@ class MergeProposalCommentType:
 
 
 @dataclasses.dataclass
-class DiffStatType:
+class DiffPerFileInfoType:
     file: str
-    additions: int
-    deletions: int
+    lines_added: int
+    lines_deleted: int
+    status: Literal["new file", "deleted file", "modified"] = "modified"
+    diff_text_snippet: Optional[str] = None
+    original_file_contents: Optional[str] = None
 
 
 @dataclasses.dataclass
 class DiffType:
     id: str
+    title: str
     self_link: str
-    diff_stats: List[DiffStatType] = dataclasses.field(default_factory=list)
+    date_created: str
+    source_revision_id: str
+    target_revision_id: str
+    diff_per_file_info: List[DiffPerFileInfoType] = dataclasses.field(default_factory=list)
     inline_comments: List[InlineCommentType] = dataclasses.field(default_factory=list)
     diff_text: Optional[str] = None
 
@@ -75,7 +82,6 @@ class MergeProposalType:
     description: Optional[str] = None
     commit_message: Optional[str] = None
     ci_cd_status: Literal["PASSING", "FAILING", "UNKNOWN"] = "UNKNOWN"
-    jira_tickets: Optional[List[str]] = dataclasses.field(default_factory=list)
     comments: List[MergeProposalCommentType] = dataclasses.field(default_factory=list)
     review_votes: List[MergeProposalReviewVote] = dataclasses.field(default_factory=list)
 
