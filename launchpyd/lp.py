@@ -379,11 +379,23 @@ def get_file_contents_from_git_url_and_hash(
         )
     )
     repo_owner = parse_repo_owner_from_url(target_git_url)
+    
 
-    # Create a temporary directory to clone the repository into
     temp_dir = os.path.join(os.path.expanduser("~"), ".lpyd", "lp_git_cloning_dir", target_git_url.split("/")[-1])
+    pickle_cache_dir = os.path.join(temp_dir+".lpyd_cache")
+    pickle_path = os.path.join(pickle_cache_dir, f"{target_hash}-file-contents.pkl")
+    # Create a temporary directory to clone the repository into
     if os.path.exists(temp_dir):
-        result = subprocess.run(f"git -C {temp_dir} remote -v", check=True, capture_output=True, shell=True, text=True)
+        # check if pickle already exists for this target_hash in the temp clone directory
+        if os.path.exists(pickle_cache_dir):
+            if os.path.exists(pickle_path):
+                print("target git hash already exists in cache. using cached file contents.")
+                with open(pickle_path, "rb") as f:
+                    file_contents = pickle.load(f)
+                return file_contents
+        else:
+            os.makedirs(pickle_cache_dir, exist_ok=True)
+        result = subprocess.run(f"git -C {temp_dir} remote -v", check=True, capture_output=True, text=True, shell=True)
         if target_git_url not in result.stdout:
             remote_add_cmd = f"git -C {temp_dir} remote add {repo_owner} {target_git_url}"
             print(remote_add_cmd)
@@ -431,6 +443,9 @@ def get_file_contents_from_git_url_and_hash(
         else:
             with open(full_path, "r") as f:
                 file_contents[file_path] = f.read()
+    # save the file contents to a pickle
+    with open(pickle_path, "wb") as f:
+        pickle.dump(file_contents, f)
     return file_contents
 
 
