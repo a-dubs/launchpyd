@@ -155,6 +155,8 @@ def get_diff_inline_comments_and_text_for_mp_and_diff(mp_obj, diff_obj):
             if simplified_comments[i]["diff_line_no"] == simplified_comments[j]["diff_line_no"]:
                 simplified_comments[i]["messages"].extend(simplified_comments[j]["messages"])
                 simplified_comments.pop(j)
+                j -= 1  # decrement j to account for the removal of the element
+                
                 break
     # read in the diff text
     diff_text_obj = diff_obj.diff_text
@@ -163,8 +165,28 @@ def get_diff_inline_comments_and_text_for_mp_and_diff(mp_obj, diff_obj):
     inline_comments = match_diff_comments_with_file(simplified_comments, diff_txt)
     return inline_comments, diff_txt
 
+# TODO: add ability to request a single diff for a lpyd MergeProposalType object
 
-def get_diffs_from_mp(num_diffs_to_fetch: int, lp_mp_obj=None, web_link: str = None) -> list[DiffType]:
+def get_diffs_from_mp(
+        num_diffs_to_fetch: int,
+        fetch_diff_files: bool = False,
+        lp_mp_obj=None, 
+        web_link: str = None
+    ) -> list[DiffType]:
+
+    """
+    Retrieves a list of diffs from the given lp_mp_obj or web_link.
+
+    Args:
+        num_diffs_to_fetch (int): The number of diffs to fetch. -1 will fetch all diffs.
+        fetch_diff_files (bool, optional): Whether to fetch the diff files. Defaults to False. This is slow and should
+        only be used when new diff files are needed.
+        lp_mp_obj (LPMPType, optional): Can be provided to avoid fetching the lp_mp_obj from the web_link. Either
+        lp_mp_obj or web_link must be provided.
+        web_link (str, optional): The web link of the merge proposal. Either lp_mp_obj or web_link must be provided.
+    Returns:
+        list[DiffType]: A list of DiffType objects representing the fetched diffs.
+    """
     if lp_mp_obj is None:
         lp_mp_obj = get_lp_mp_obj_from_url(web_link)
     diffs: list[DiffType] = []
@@ -175,7 +197,7 @@ def get_diffs_from_mp(num_diffs_to_fetch: int, lp_mp_obj=None, web_link: str = N
             break
         diff_obj = LP.load(diff["self_link"])
         inline_comments_dicts, diff_text = get_diff_inline_comments_and_text_for_mp_and_diff(lp_mp_obj, diff_obj)
-        diff_per_file_info = get_all_diff_per_file_info(lp_mp_obj, diff_obj, diff_text)
+        diff_per_file_info = get_all_diff_per_file_info(lp_mp_obj, diff_obj, diff_text) if fetch_diff_files else []
         diffs.append(
             DiffType(
                 inline_comments=[convert_inline_comments_dict_to_type(d) for d in inline_comments_dicts],
@@ -230,9 +252,10 @@ def parse_jira_tickets_from_mp(mp: MergeProposalType, jira_prefixes: list[str]) 
 
 def get_lpyd_mp(
     web_link: str = None,
-    lp_mp_obj=None,
+    lp_mp_obj = None,
     lp_mp_dict: dict = None,
-    num_diffs_to_fetch=0,
+    num_diffs_to_fetch: int = 0,
+    fetch_diff_files: bool = False,
 ) -> MergeProposalType:
     """
     Returns a MergeProposalType object
@@ -259,7 +282,11 @@ def get_lpyd_mp(
         **source_and_target_info,
     )
     if num_diffs_to_fetch != 0:
-        lpyd_mp.diffs = get_diffs_from_mp(lp_mp_obj=lp_mp_obj, num_diffs_to_fetch=num_diffs_to_fetch)
+        lpyd_mp.diffs = get_diffs_from_mp(
+            lp_mp_obj=lp_mp_obj,
+            num_diffs_to_fetch=num_diffs_to_fetch,
+            fetch_diff_files=fetch_diff_files,
+        )
     return lpyd_mp
 
 
